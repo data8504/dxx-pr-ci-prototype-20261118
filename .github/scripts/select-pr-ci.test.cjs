@@ -72,6 +72,25 @@ test('permits arbitrary game/build changes and unordered tree responses', async 
   assert.equal(state.outputs.eligible, 'true');
 });
 
+test('manual replay uses the same live binding and definition checks', async () => {
+  const state = fixture();
+  state.args.context.eventName = 'workflow_dispatch';
+  state.args.context.payload = { inputs: { request_run_id: '10' } };
+  await select(state.args);
+  assert.equal(state.outputs.eligible, 'true');
+  assert.equal(state.outputs.head_sha, head);
+});
+
+for (const input of ['10/approve', '1e1', '0', '-1', '9007199254740992', 10, undefined]) {
+  test(`rejects invalid manual run id ${String(input)}`, async () => {
+    const state = fixture();
+    state.args.context.eventName = 'workflow_dispatch';
+    state.args.context.payload = { inputs: { request_run_id: input } };
+    await assert.rejects(select(state.args));
+    assert.deepEqual(state.outputs, {});
+  });
+}
+
 for (const [name, mutate] of [
   ['modified workflow', tree => { tree[1].sha = changed; }],
   ['added workflow', tree => tree.push({ path: '.github/workflows/extra.yml', mode: '100644', type: 'blob', sha: changed })],

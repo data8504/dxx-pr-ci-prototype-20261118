@@ -19,6 +19,9 @@ artifacts. Untrusted source still executes on disposable GitHub-hosted runners.
 
 This relies on the existing approval requirement for all external contributors
 and needs no additional secret. The controller must be on the default branch.
+The manual entry point can replay a held run by its run ID. GitHub's event
+recursion guard can suppress follow-up events for PRs created by `GITHUB_TOKEN`;
+those requests need this entry point instead of the automatic listener.
 If required checks name the original CI jobs, selecting the new aggregate status
 as a required check is a separate administrator decision.
 

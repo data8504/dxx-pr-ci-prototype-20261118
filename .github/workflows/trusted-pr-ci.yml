@@ -1,5 +1,11 @@
 name: Trusted PR CI
 on:
+  workflow_dispatch:
+    inputs:
+      request_run_id:
+        description: Held CI run to validate using the reviewed definitions
+        required: true
+        type: string
   workflow_run:
     workflows: [Continuous Integration]
     types: [requested]
@@ -9,15 +15,16 @@ on:
 permissions: {}
 cache-mode: none
 concurrency:
-  group: trusted-pr-${{ github.event.workflow_run.head_repository.id }}-${{ github.event.workflow_run.head_sha }}
+  group: trusted-pr-${{ github.event.workflow_run.head_repository.id }}-${{ github.event.workflow_run.head_sha || inputs.request_run_id }}
   cancel-in-progress: false
 
 jobs:
   select:
     if: >-
+      github.event_name == 'workflow_dispatch' || (
       github.event.workflow_run.event == 'pull_request' &&
       github.event.workflow_run.path == '.github/workflows/ci.yml' &&
-      github.event.workflow_run.conclusion == 'action_required'
+      github.event.workflow_run.conclusion == 'action_required')
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions:

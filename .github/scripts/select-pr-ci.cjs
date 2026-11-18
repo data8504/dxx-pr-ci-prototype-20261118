@@ -4,8 +4,10 @@ module.exports = async ({ github, context, core }) => {
   const sha = value => typeof value === 'string' && /^[0-9a-f]{40}$/.test(value);
   const id = value => Number.isSafeInteger(value) && value > 0;
   const { owner, repo } = context.repo;
-  const runId = context.payload.workflow_run?.id;
-  if (context.eventName !== 'workflow_run' || !id(runId) || !sha(context.sha))
+  const manualId = context.payload.inputs?.request_run_id;
+  const runId = context.eventName === 'workflow_run' ? context.payload.workflow_run?.id :
+    typeof manualId === 'string' && /^[1-9][0-9]*$/.test(manualId) ? Number(manualId) : undefined;
+  if (!['workflow_run', 'workflow_dispatch'].includes(context.eventName) || !id(runId) || !sha(context.sha))
     fail('Invalid workflow run event');
   const { data: repository } = await github.rest.repos.get({ owner, repo });
   const { data: run } = await github.rest.actions.getWorkflowRun({ owner, repo, run_id: runId });
