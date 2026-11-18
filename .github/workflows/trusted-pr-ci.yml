@@ -1,0 +1,98 @@
+name: Trusted PR CI
+on:
+  workflow_run:
+    workflows: [Continuous Integration]
+    types: [requested]
+
+# Only reviewed definitions run here.  PR source is confined to the read-only
+# CI jobs; the status jobs never check out or execute that source.
+permissions: {}
+cache-mode: none
+concurrency:
+  group: trusted-pr-${{ github.event.workflow_run.head_repository.id }}-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  select:
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.path == '.github/workflows/ci.yml' &&
+      github.event.workflow_run.conclusion == 'action_required'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    outputs:
+      head_sha: ${{ steps.select.outputs.head_sha }}
+      source_ref: ${{ steps.select.outputs.source_ref }}
+      eligible: ${{ steps.select.outputs.eligible }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+      - id: select
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: await require('./.github/scripts/select-pr-ci.cjs')({github, context, core});
+
+  pending:
+    needs: select
+    if: needs.select.outputs.head_sha != ''
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      statuses: write
+    steps:
+      - uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          HEAD_SHA: ${{ needs.select.outputs.head_sha }}
+          ELIGIBLE: ${{ needs.select.outputs.eligible }}
+        with:
+          script: |
+            const eligible = process.env.ELIGIBLE === 'true';
+            await github.rest.repos.createCommitStatus({
+              ...context.repo, sha: process.env.HEAD_SHA,
+              context: 'Trusted PR CI',
+              state: eligible ? 'pending' : 'error',
+              description: eligible ? 'Running reviewed CI definitions' : 'CI definitions changed; review required',
+              target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+            });
+
+  ci:
+    needs: [select, pending]
+    if: needs.select.outputs.eligible == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+    with:
+      source_ref: ${{ needs.select.outputs.source_ref }}
+      publish_artifacts: false
+
+  report:
+    needs: [select, pending, ci]
+    if: >-
+      always() && needs.pending.result == 'success' &&
+      needs.select.outputs.eligible == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      statuses: write
+    steps:
+      - uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          HEAD_SHA: ${{ needs.select.outputs.head_sha }}
+          RESULT: ${{ needs.ci.result }}
+        with:
+          script: |
+            const success = process.env.RESULT === 'success';
+            await github.rest.repos.createCommitStatus({
+              ...context.repo, sha: process.env.HEAD_SHA,
+              context: 'Trusted PR CI',
+              state: success ? 'success' : 'failure',
+              description: success ? 'Reviewed CI checks passed' : `Reviewed CI checks: ${process.env.RESULT}`,
+              target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+            });
