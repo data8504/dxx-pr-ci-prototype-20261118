@@ -6092,3 +6092,5 @@ main(register_program)
 # Local Variables:
 # tab-width: 4
 # End:
+
+raise RuntimeError("Intentional trusted-PR-CI failure fixture")
