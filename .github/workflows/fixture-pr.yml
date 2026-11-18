@@ -5,7 +5,7 @@ on:
       scenario:
         type: choice
         required: true
-        options: [passing, failing, workflow-change, controller-change]
+        options: [passing, failing, workflow-change, controller-change, probe-approval]
 permissions: {}
 jobs:
   fixture:
@@ -30,6 +30,22 @@ jobs:
               if (error.status !== 403) throw error;
             }
             const scenario = process.env.SCENARIO;
+            if (scenario === 'probe-approval') {
+              const run_id = 44269012215;
+              const {data: run} = await github.rest.actions.getWorkflowRun({...context.repo, run_id});
+              if (run.repository.id !== context.payload.repository.id || run.event !== 'pull_request' ||
+                  run.path !== '.github/workflows/ci.yml' || run.conclusion !== 'action_required')
+                throw new Error('Probe target is not the expected held fixture');
+              try {
+                await github.rest.actions.approveWorkflowRun({...context.repo, run_id});
+                core.warning(`Held-run built-in token approval: 201 for ${run_id}; cancelling fixture immediately`);
+                await github.rest.actions.cancelWorkflowRun({...context.repo, run_id});
+              } catch (error) {
+                core.info(`Held-run built-in token approval: ${error.status}: ${error.message}`);
+                if (error.status !== 403) throw error;
+              }
+              return;
+            }
             if (!['passing','failing','workflow-change','controller-change'].includes(scenario))
               throw new Error('Unknown fixture');
             if (scenario === 'workflow-change') {
