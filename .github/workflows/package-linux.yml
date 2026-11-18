@@ -155,3 +155,5 @@ jobs:
           "CXXFLAGS=-flto=$(( $nproc + 1 / 2 ))"
           check_header_includes=1
           build/{common,d1x-rebirth,d2x-rebirth}/check_header_includes
+
+# A PR workflow change must remain held.
