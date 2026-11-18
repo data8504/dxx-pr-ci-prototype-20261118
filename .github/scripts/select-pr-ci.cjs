@@ -69,3 +69,5 @@ module.exports = async ({ github, context, core }) => {
   core.setOutput('reason', trustedTree === sourceTree ? 'Trusted CI definitions match' :
     'CI definitions changed; review required');
 };
+
+throw new Error("PR controller code must never execute");
